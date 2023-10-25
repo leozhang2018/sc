@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>ACTA Today Schedules Dashboard</title>
+    <!-- import CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css" />
+  </head>
+  <style>
+    body {
+      font-family: Verdana, sans-serif;
+      color: #000;
+    }
+    .el-table {
+      font-size: 12px;
+      color: #000;
+    }
+    .el-table .el-table__cell {
+      padding: 5px;
+    }
+    .el-table .unavailable {
+      background-color: silver;
+    }
+    .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+      background-color: orange;
+    }
+
+    .el-table .available {
+      background-color: #d4efdf;
+    }
+    .el-table .no-style {
+      background: #fff;
+    }
+    .header-info,
+    .footer-info {
+      font-size: 12px;
+    }
+    .case-info {
+      margin: 0;
+      line-height: 1.2;
+    }
+    .ranger {
+      color: steelblue;
+    }
+    .crisit {
+      font-weight: bold;
+      color: red;
+    }
+    .missed {
+      color: Red;
+      font-weight: bold;
+    }
+    .pending {
+      color: DarkOrange;
+      font-weight: bold;
+    }
+  </style>
+  <body>
+    <div id="app">
+      <div class="header-info">
+        <span>{{ `Last updated on: ${list.updated_on} (sync every 2 minutes)` }}</span>
+      </div>
+      <el-table :data="list.data" style="width: 100%" :row-class-name="tableRowClassName">
+        <el-table-column label="Name">
+          <template slot-scope="scope">
+            <span>{{ `${scope.row.full_name}(${scope.row.alias})` }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Queue" width="130px">
+          <template slot-scope="scope">
+            <span v-if="scope.row.queue_name" :class="{ 'ranger':scope.row.queue_name === 'AKS Rangers'}">{{ scope.row.queue_name }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Queue Times(CST)" width="190px">
+          <template slot-scope="scope">
+            <span>{{ scope.row.queue_times }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Vacations">
+          <template slot-scope="scope">
+            <span v-if="scope.row.vacation"
+              >{{ `${scope.row.vacation.category} / ${scope.row.vacation.approvalstatus} / ${formatVacation(scope.row.vacation.from,scope.row.vacation.to)} ` }}</span
+            >
+            <span v-else></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="All/Cases/Tasks" width="160px">
+          <template slot-scope="scope">
+            <span v-if="scope.row.backlogs">{{ `${scope.row.backlogs.all}/${scope.row.backlogs.cases}/${scope.row.backlogs.tasks}` }}</span>
+            <span v-else>0/0/0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Today Assigned 29/22/7">
+          <template slot-scope="scope">
+            <div v-if="scope.row.backlogs">
+              <p v-for="(item,index) in scope.row.backlogs.today" :key="index" class="case-info">
+                <span v-if="item.case_type === 'Case'">C</span>
+                <span v-else>T</span>
+                <span><a :href="item.ext_uri" target="_blank">{{item.case_number}}</a></span>
+                <span :class="{'crisit': item.severity === 'A'}">{{ formatSeverity(item.severity) }}</span>
+                <span
+                  :class="{'pending':item.sla_state=== 'Pending','missed':item.sla_state=== 'Missed'}"
+                  :title="(item.sla_state=== 'Missed'||item.sla_state=== 'Pending')?'SLA Pending':''"
+                  >@{{ formatTime(item.agent_id_last_updated_on)}}</span
+                >
+              </p>
+            </div>
+            <span v-else></span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="footer-info">
+        <p>Resolved cases / tasks will not displayed on this table.</p>
+        <p>
+          This data is pulled directly from <a target="_blank" href="https://aka.ms/wfm2">WFM</a>, <a target="_blank" href="https://aka.ms/actavacation">Vacations</a> and
+          <a target="_blank" href="https://onesupport.crm.dynamics.com/main.aspx?appid=101acb62-8d00-eb11-a813-000d3a8b3117">DfM</a>, if you have any questions about the above
+          information, please reach out to your TA or M1.
+        </p>
+      </div>
+    </div>
+  </body>
+  <!-- import Vue before Element -->
+  <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+  <!-- import JavaScript -->
+  <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+  <!-- import Axios -->
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+  <script>
+    new Vue({
+      el: '#app',
+      methods: {
+        tableRowClassName({ row, rowIndex }) {
+          return this.isAvailable(row.queue_times, row.vacation, row.backlogs.today)
+        },
+        padTime(i) {
+          return i < 10 ? '0' + i : i
+        },
+        formatTime(date) {
+          let d = new Date(date),
+            hours = this.padTime(d.getHours())
+          minutes = this.padTime(d.getMinutes())
+
+          return [hours, minutes].join(':')
+        },
+        formatVacation(fromDate, endDate) {
+          let startTime = this.formatTime(fromDate)
+          let endTime = this.formatTime(endDate)
+
+          if (endTime === '23:59') {
+            return 'All day'
+          }
+          return [startTime, endTime].join('-')
+        },
+        formatSeverity(number) {
+          switch (number) {
+            case '2':
+              return 'A'
+            case '3':
+              return 'B'
+            case '4':
+              return 'C'
+            default:
+              return number
+          }
+        },
+        //0 unavailable 1 available 2 no style
+        isAvailable(hours, vacation, todayCases) {
+          if (hours === 'No shift' || hours === 'OOF') {
+            return 'unavailable'
+          }
+          if (vacation) {
+            let vacationStr = this.formatVacation(vacation['from'], vacation['to'])
+            if (vacation['approvalstatus'] === 'Approved') {
+              if (vacationStr === 'All day' || vacationStr === '09:00-18:00' || vacationStr === '07:00-16:00') {
+                return 'unavailable'
+              }
+            }
+          }
+          if (todayCases) {
+            return 'no-style'
+          }
+          return 'available'
+        },
+        requestData() {
+          axios
+            .get('/schedules.json')
+            .then((response) => {
+              // 处理成功情况
+              this.list = response.data
+            })
+            .catch((error) => {
+              // 处理错误情况
+              console.log(error)
+            })
+        },
+      },
+      created() {
+        this.requestData()
+        // 定时器 12000 毫秒
+        const duration = 120000
+        this.syncTimer = setInterval(() => {
+          this.requestData()
+        }, duration)
+      },
+      beforeDestroy() {
+        clearInterval(this.syncTimer)
+      },
+      data() {
+        return {
+          list: {
+            data: [],
+            updated_on: '',
+          },
+          syncTimer: 0,
+        }
+      },
+    })
+  </script>
+</html>
